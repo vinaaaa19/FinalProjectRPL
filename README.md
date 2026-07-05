@@ -214,11 +214,11 @@ Model pengembangan perangkat lunak yang digunakan adalah Prototype.
 
 Tahapan pengembangan meliputi:
 
-1. Communication
-2. Quick Plan
-3. Modeling Quick Design
-4. Construction of Prototype
-5. Deployment, Delivery and Feedback
+1. Pengumpulan Kebutuhan
+2. Pembuatan Prototype
+3. Evaluasi Prototype
+4. Pengembangan Sistem
+5. Pengujian Sistem
 
 Metode pengujian sistem menggunakan Black Box Testing.
 
