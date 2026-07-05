@@ -15,6 +15,25 @@ if ($_SESSION['role'] != 'pemilik') {
 $notif_stok = mysqli_query($conn, "SELECT * FROM bahan WHERE status='Menipis'");
 $jumlah_notif = mysqli_num_rows($notif_stok);
 
+$notif_minuman_habis = mysqli_query($conn, "
+    SELECT * FROM minuman 
+    WHERE stok <= 0
+");
+
+$jumlah_minuman_habis = mysqli_num_rows($notif_minuman_habis);
+
+$jumlah_notif = $jumlah_notif + $jumlah_minuman_habis;
+
+$notif_bukti = mysqli_query($conn, "
+    SELECT * FROM transaksi 
+    WHERE metode_pembayaran != 'Tunai'
+    AND (bukti_pembayaran IS NULL OR bukti_pembayaran = '')
+");
+
+$jumlah_bukti = mysqli_num_rows($notif_bukti);
+
+$jumlah_notif = $jumlah_notif + $jumlah_bukti;
+
 $user = mysqli_fetch_assoc(
     mysqli_query($conn,"
         SELECT * FROM users
@@ -41,10 +60,53 @@ $total_transaksi_hari_ini = mysqli_num_rows(
     ")
 );
 
-$total_minuman = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM minuman"));
-$total_bahan = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM bahan"));
-$total_karyawan = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM users WHERE role='karyawan'"));
-$total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"));
+$pendapatan_hari_ini = mysqli_fetch_assoc(mysqli_query($conn,"
+SELECT IFNULL(SUM(total),0) AS total
+FROM transaksi
+WHERE DATE(tanggal)=CURDATE()
+"));
+
+$pendapatan_bulan = mysqli_fetch_assoc(mysqli_query($conn,"
+SELECT IFNULL(SUM(total),0) AS total
+FROM transaksi
+WHERE MONTH(tanggal)=MONTH(CURDATE())
+AND YEAR(tanggal)=YEAR(CURDATE())
+"));
+
+$terlaris = mysqli_fetch_assoc(mysqli_query($conn,"
+SELECT 
+    minuman.nama_minuman,
+    SUM(detail_transaksi.qty) AS total_terjual
+FROM detail_transaksi
+JOIN minuman 
+ON detail_transaksi.id_minuman = minuman.id_minuman
+GROUP BY detail_transaksi.id_minuman
+ORDER BY total_terjual DESC
+LIMIT 1
+"));
+
+$jumlah_bahan_menipis=mysqli_num_rows($notif_stok);
+
+$grafik = mysqli_query($conn,"
+SELECT 
+    DATE(tanggal) AS hari,
+    SUM(total) AS total
+FROM transaksi
+WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+GROUP BY DATE(tanggal)
+ORDER BY DATE(tanggal)
+");
+
+$label = [];
+$data = [];
+
+while($g = mysqli_fetch_assoc($grafik)){
+
+    $label[] = date("d M", strtotime($g['hari']));
+    $data[] = $g['total'];
+
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -52,6 +114,62 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
 <head>
     <title>Dashboard Pemilik - Drink Point</title>
     <style>
+
+        .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.modal-box {
+    background: white;
+    width: 360px;
+    padding: 28px;
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+
+.modal-box h3 {
+    margin-top: 0;
+    color: #d6001c;
+}
+
+.modal-box p {
+    color: #555;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.btn-cancel,
+.btn-logout {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-cancel {
+    background: #f3f4f6;
+    color: #333;
+}
+
+.btn-logout {
+    background: #d6001c;
+    color: white;
+}
+
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -63,18 +181,35 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
             min-height: 100vh;
         }
 
-        .sidebar {
-            width: 270px;
-            background: linear-gradient(180deg, #e6001f, #b40018);
-            color: white;
-            padding: 30px 25px;
-            position: relative;
+        .sidebar{
+            width:300px;
+            background:linear-gradient(180deg,#e6001f,#b40018);
+            color:white;
+            padding:30px 25px;
+
+            position:fixed;
+            left:0;
+            top:0;
+
+            height:100vh;
+            overflow-y:auto;
+        }
+
+        .content{
+              margin-left:330px;
+    width:calc(100% - 300px);
+
+            padding:45px;
+            background:white;
+
+            height:100vh;
+            overflow-y:auto;
         }
 
         .logo {
-            font-size: 30px;
-            font-weight: bold;
-            margin-bottom: 40px;
+             font-size:30px;
+    font-weight:bold;
+    margin-bottom:40px;
         }
 
         .menu-title {
@@ -84,13 +219,13 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
         }
 
         .menu a {
-            display: block;
-            color: white;
-            text-decoration: none;
-            padding: 15px 18px;
-            border-radius: 12px;
-            margin-bottom: 10px;
-            font-size: 17px;
+             display:block;
+    color:white;
+    text-decoration:none;
+    padding:15px 18px;
+    border-radius:12px;
+    margin-bottom:10px;
+    font-size:17px;
         }
 
         .menu a.active,
@@ -98,17 +233,22 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
             background: rgba(255,255,255,0.25);
         }
 
+        .menu {
+            padding-bottom: 160px;
+        }
+
         .logout-box {
-            position: absolute;
+            position: fixed;
             left: 25px;
             bottom: 25px;
-            width: 220px;
+            width: 240px;
             background: rgba(255,255,255,0.08);
             border: 1px solid rgba(255,255,255,0.35);
             border-radius: 15px;
             padding: 18px;
             color: white;
             text-decoration: none;
+            z-index: 1000;
         }
 
         .logout-box div {
@@ -123,12 +263,6 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
 
         .logout-box:hover {
             background: rgba(255,255,255,0.18);
-        }
-
-        .content {
-            flex: 1;
-            padding: 45px;
-            background: white;
         }
 
         .top {
@@ -365,6 +499,38 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
             color: #d6001c;
             font-weight: bold;
         }
+
+.chart-card{
+    width:100%;
+    background:white;
+    border-radius:22px;
+    padding:25px;
+    margin:25px 0 35px;
+    box-shadow:0 8px 25px rgba(0,0,0,.07);
+    box-sizing:border-box;
+}
+
+.chart-header h2{
+    margin:0;
+    font-size:24px;
+}
+
+.chart-header p{
+    margin:6px 0 18px;
+    color:#666;
+}
+
+.chart-wrap{
+    position:relative;
+    width:100%;
+    height:300px;
+}
+
+.chart-wrap canvas{
+    width:100% !important;
+    height:100% !important;
+}
+
     </style>
 </head>
 <body>
@@ -385,11 +551,10 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
             <a href="laporan.php">📊 Laporan Penjualan</a>
             <a href="validasi.php">✅ Validasi Laporan</a>
             <a href="akun_karyawan.php">👥 Akun Karyawan</a>
+            <a href="profil_pemilik.php">👤 Profil Saya</a>
         </div>
 
-        <a href="logout.php" 
-             onclick="return confirm('Yakin ingin logout?')" 
-             class="logout-box">
+        <a href="#" onclick="openLogoutModal()" class="logout-box">
             <div>🚪 Logout</div>
             <small>Keluar dari sistem</small>
         </a>
@@ -409,12 +574,44 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
                         <b>Notifikasi</b>
 
                         <?php if ($jumlah_notif > 0) { ?>
-                            <?php while ($n = mysqli_fetch_assoc($notif_stok)) { ?>
-                                <p>⚠ Stok <?php echo $n['nama_bahan']; ?> menipis</p>
-                            <?php } ?>
-                        <?php } else { ?>
-                            <p>Tidak ada notifikasi</p>
-                        <?php } ?>
+
+    <?php while ($n = mysqli_fetch_assoc($notif_stok)) { ?>
+       <p>
+    <a href="<?php echo ($_SESSION['role']=='pemilik') ? 'stok_bahan.php' : 'stok_bahan_karyawan.php'; ?>"
+       style="color:#333;text-decoration:none;">
+        ⚠ Stok <?php echo $n['nama_bahan']; ?> menipis
+        <br>
+        <small>Klik untuk cek stok bahan</small>
+    </a>
+</p>
+    <?php } ?>
+
+    <?php while ($m = mysqli_fetch_assoc($notif_minuman_habis)) { ?>
+    <p>
+        <a href="data_minuman.php" style="color:#333;text-decoration:none;">
+            🥤 Minuman <?php echo $m['nama_minuman']; ?> habis
+            <br>
+            <small>Klik untuk cek data minuman</small>
+        </a>
+    </p>
+<?php } ?>
+
+    <?php while ($b = mysqli_fetch_assoc($notif_bukti)) { ?>
+    <p>
+    <a href="laporan.php" style="color:#333;text-decoration:none;">
+        📷 Bukti pembayaran transaksi 
+        #<?php echo $b['id_transaksi']; ?> belum diupload
+        <br>
+        <small>Klik untuk upload bukti pembayaran</small>
+    </a>
+</p>
+<?php } ?>
+
+<?php } else { ?>
+
+    <p>Tidak ada notifikasi</p>
+
+<?php } ?>
                     </div>
                 </div>
 
@@ -423,13 +620,8 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
 
                         <?php if(!empty($user['foto'])){ ?>
 
-                        <img src="uploads/<?php echo $user['foto']; ?>"
-                            style="
-                            width:100%;
-                            height:100%;
-                            object-fit:cover;
-                            border-radius:50%;
-                        ">
+                       <img src="./uploads/<?php echo $user['foto']; ?>" 
+                          style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
 
                         <?php } else { ?>
 
@@ -442,7 +634,7 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
 
                 <div class="profile-info">
                     <b><?php echo $_SESSION['nama']; ?></b><br>
-                    <span>Pemilik</span>
+                    <span><?php echo ucfirst($_SESSION['role']); ?></span>
                 </div>
 
             </div>
@@ -451,21 +643,11 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
         <h1>Dashboard Pemilik</h1>
         <p class="subtitle">Ringkasan sistem dan akses menu utama Drink Point</p>
 
-        <div class="stats">
+<div class="stats">
 
     <div class="stat-card">
-        <h2><?php echo $total_minuman; ?></h2>
-        <p>🧋 Total Minuman</p>
-    </div>
-
-    <div class="stat-card">
-        <h2><?php echo $total_bahan; ?></h2>
-        <p>📦 Total Bahan</p>
-    </div>
-
-    <div class="stat-card">
-        <h2><?php echo $total_karyawan; ?></h2>
-        <p>👥 Karyawan</p>
+        <h2>Rp <?php echo number_format($pendapatan_hari_ini['total'],0,',','.'); ?></h2>
+        <p>💰 Pendapatan Hari Ini</p>
     </div>
 
     <div class="stat-card">
@@ -473,8 +655,48 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
         <p>🛒 Transaksi Hari Ini</p>
     </div>
 
+    <div class="stat-card">
+        <h2><?php echo !empty($terlaris['nama_minuman']) ? $terlaris['nama_minuman'] : '-'; ?></h2>
+        <p>🥤 Minuman Terlaris</p>
+    </div>
+
+    <div class="stat-card">
+        <h2><?php echo $jumlah_bukti; ?></h2>
+        <p>📷 Bukti Belum Upload</p>
+    </div>
+
+    <div class="stat-card">
+        <h2><?php echo mysqli_num_rows($notif_stok); ?></h2>
+        <p>⚠️ Bahan Menipis</p>
+    </div>
+
+    <div class="stat-card">
+        <h2><?php echo $total_karyawan; ?></h2>
+        <p>👥 Total Karyawan</p>
+    </div>
+
+    <div class="stat-card">
+        <h2><?php echo $total_minuman; ?></h2>
+        <p>🧋 Total Minuman</p>
+    </div>
+
+    <div class="stat-card">
+        <h2>Rp <?php echo number_format($pendapatan_bulan['total'],0,',','.'); ?></h2>
+        <p>📈 Penjualan Bulan Ini</p>
+    </div>
+
 </div>
 
+<div class="chart-card">
+    <div class="chart-header">
+        <h2>📈 Penjualan 7 Hari Terakhir</h2>
+        <p>Total penjualan harian dalam 7 hari terakhir</p>
+    </div>
+
+    <div class="chart-wrap">
+        <canvas id="salesChart"></canvas>
+    </div>
+</div>
         <h2 class="menu-heading">Menu Utama</h2>
 
         <div class="grid">
@@ -521,6 +743,75 @@ $total_transaksi = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM transaksi"
     </div>
 
 </div>
+
+<div id="logoutModal" class="modal">
+    <div class="modal-box">
+        <h3>Konfirmasi Logout</h3>
+        <p>Yakin ingin keluar dari sistem?</p>
+
+        <div class="modal-actions">
+            <button onclick="closeLogoutModal()" class="btn-cancel">Batal</button>
+            <a href="logout.php" class="btn-logout">Logout</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openLogoutModal() {
+    document.getElementById("logoutModal").style.display = "flex";
+}
+
+function closeLogoutModal() {
+    document.getElementById("logoutModal").style.display = "none";
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+const ctx = document.getElementById('salesChart');
+
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: <?php echo json_encode($label); ?>,
+        datasets: [{
+            label: 'Total Penjualan',
+            data: <?php echo json_encode($data); ?>,
+            borderColor: '#d6001c',
+            backgroundColor: 'rgba(214,0,28,.12)',
+            fill: true,
+            tension: 0.35,
+            pointRadius: 5,
+            pointHoverRadius: 7
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return 'Rp ' + context.raw.toLocaleString('id-ID');
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return 'Rp ' + value.toLocaleString('id-ID');
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
 
 </body>
 </html>

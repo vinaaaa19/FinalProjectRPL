@@ -15,6 +15,25 @@ if ($_SESSION['role'] != 'pemilik') {
 $notif_stok = mysqli_query($conn, "SELECT * FROM bahan WHERE status='Menipis'");
 $jumlah_notif = mysqli_num_rows($notif_stok);
 
+$notif_minuman_habis = mysqli_query($conn, "
+    SELECT * FROM minuman 
+    WHERE stok <= 0
+");
+
+$jumlah_minuman_habis = mysqli_num_rows($notif_minuman_habis);
+
+$jumlah_notif = $jumlah_notif + $jumlah_minuman_habis;
+
+$notif_bukti = mysqli_query($conn, "
+    SELECT * FROM transaksi 
+    WHERE metode_pembayaran != 'Tunai'
+    AND (bukti_pembayaran IS NULL OR bukti_pembayaran = '')
+");
+
+$jumlah_bukti = mysqli_num_rows($notif_bukti);
+
+$jumlah_notif = $jumlah_notif + $jumlah_bukti;
+
 $user = mysqli_fetch_assoc(
     mysqli_query($conn, "
         SELECT * FROM users
@@ -34,18 +53,25 @@ if (isset($_POST['tambah'])) {
         ('$nama', '$harga', '$stok', '$status')
     ");
 
-    header("Location: data_minuman.php");
+    header("Location: data_minuman.php?success=tambah");
     exit;
 }
 
 if (isset($_GET['hapus'])) {
     $id = $_GET['hapus'];
     mysqli_query($conn, "DELETE FROM minuman WHERE id_minuman='$id'");
-    header("Location: data_minuman.php");
+    header("Location: data_minuman.php?success=hapus");
     exit;
 }
 
-$data = mysqli_query($conn, "SELECT * FROM minuman");
+$cari = isset($_GET['cari']) ? $_GET['cari'] : '';
+
+$data = mysqli_query($conn, "
+    SELECT * FROM minuman
+    WHERE nama_minuman LIKE '%$cari%'
+    ORDER BY id_minuman DESC
+");
+
 ?>
 
 <!DOCTYPE html>
@@ -64,12 +90,29 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
             min-height: 100vh;
         }
 
-        .sidebar {
-            width: 270px;
-            background: linear-gradient(180deg, #e6001f, #b40018);
-            color: white;
-            padding: 30px 25px;
-            position: relative;
+        .sidebar{
+            width:300px;
+            background:linear-gradient(180deg,#e6001f,#b40018);
+            color:white;
+            padding:30px 25px;
+
+            position:fixed;
+            left:0;
+            top:0;
+
+            height:100vh;
+            overflow-y:auto;
+        }
+
+        .content{
+            margin-left:330px;
+    width:calc(100% - 300px);
+
+            padding:45px;
+            background:white;
+
+            height:100vh;
+            overflow-y:auto;
         }
 
         .logo {
@@ -99,8 +142,12 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
             background: rgba(255,255,255,0.25);
         }
 
+        .menu {
+            padding-bottom: 110px;
+        }
+
         .logout-box {
-            position: absolute;
+            position: fixed;
             left: 25px;
             bottom: 25px;
             width: 220px;
@@ -110,6 +157,7 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
             padding: 18px;
             color: white;
             text-decoration: none;
+            z-index: 1000;
         }
 
         .logout-box div {
@@ -124,12 +172,6 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
 
         .logout-box:hover {
             background: rgba(255,255,255,0.18);
-        }
-
-        .content {
-            flex: 1;
-            padding: 45px;
-            background: white;
         }
 
         .top {
@@ -238,6 +280,15 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
             margin-bottom: 35px;
         }
 
+        .success-box {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
         .form-card,
         .table-card {
             background: white;
@@ -310,6 +361,61 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
             text-decoration: none;
         }
 
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+
+        .modal-box {
+            background: white;
+            width: 360px;
+            padding: 28px;
+            border-radius: 18px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+        }
+
+        .modal-box h3 {
+            margin-top: 0;
+            color: #d6001c;
+        }
+
+        .modal-box p {
+            color: #555;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .btn-cancel,
+        .btn-confirm {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-cancel {
+            background: #f3f4f6;
+            color: #333;
+        }
+
+        .btn-confirm {
+            background: #d6001c;
+            color: white;
+        }
+
         .footer {
             text-align: center;
             margin-top: 50px;
@@ -323,6 +429,7 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
         }
     </style>
 </head>
+
 <body>
 
 <div class="container">
@@ -341,11 +448,10 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
             <a href="laporan.php">📊 Laporan Penjualan</a>
             <a href="validasi.php">✅ Validasi Laporan</a>
             <a href="akun_karyawan.php">👥 Akun Karyawan</a>
+            <a href="profil_pemilik.php">👤 Profil Saya</a>
         </div>
 
-        <a href="logout.php" 
-            onclick="return confirm('Yakin ingin logout?')" 
-            class="logout-box">
+        <a href="#" onclick="openConfirmModal('logout.php','Konfirmasi Logout','Yakin ingin keluar dari sistem?','Logout')" class="logout-box">
             <div>🚪 Logout</div>
             <small>Keluar dari sistem</small>
         </a>
@@ -366,19 +472,51 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
                         <b>Notifikasi</b>
 
                         <?php if ($jumlah_notif > 0) { ?>
-                            <?php while ($n = mysqli_fetch_assoc($notif_stok)) { ?>
-                                <p>⚠ Stok <?php echo $n['nama_bahan']; ?> menipis</p>
-                            <?php } ?>
-                        <?php } else { ?>
-                            <p>Tidak ada notifikasi</p>
-                        <?php } ?>
+
+    <?php while ($n = mysqli_fetch_assoc($notif_stok)) { ?>
+       <p>
+    <a href="<?php echo ($_SESSION['role']=='pemilik') ? 'stok_bahan.php' : 'stok_bahan_karyawan.php'; ?>"
+       style="color:#333;text-decoration:none;">
+        ⚠ Stok <?php echo $n['nama_bahan']; ?> menipis
+        <br>
+        <small>Klik untuk cek stok bahan</small>
+    </a>
+</p>
+    <?php } ?>
+
+    <?php while ($m = mysqli_fetch_assoc($notif_minuman_habis)) { ?>
+    <p>
+        <a href="data_minuman.php" style="color:#333;text-decoration:none;">
+            🥤 Minuman <?php echo $m['nama_minuman']; ?> habis
+            <br>
+            <small>Klik untuk cek data minuman</small>
+        </a>
+    </p>
+<?php } ?>
+
+    <?php while ($b = mysqli_fetch_assoc($notif_bukti)) { ?>
+   <p>
+    <a href="laporan.php" style="color:#333;text-decoration:none;">
+        📷 Bukti pembayaran transaksi 
+        #<?php echo $b['id_transaksi']; ?> belum diupload
+        <br>
+        <small>Klik untuk upload bukti pembayaran</small>
+    </a>
+</p>
+<?php } ?>
+
+<?php } else { ?>
+
+    <p>Tidak ada notifikasi</p>
+
+<?php } ?>
                     </div>
                 </div>
 
                 <a href="profil_pemilik.php" class="avatar-link">
                     <div class="avatar-mini">
                         <?php if (!empty($user['foto'])) { ?>
-                            <img src="uploads/<?php echo $user['foto']; ?>" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                            <img src="./uploads/<?php echo $user['foto']; ?>" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
                         <?php } else { ?>
                             <?php echo strtoupper(substr($_SESSION['nama'], 0, 1)); ?>
                         <?php } ?>
@@ -396,6 +534,12 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
         <h1>Data Minuman</h1>
         <p class="subtitle">Kelola data minuman yang tersedia</p>
 
+        <?php if(isset($_GET['success'])){ ?>
+            <div class="success-box">
+                ✅ Data minuman berhasil diperbarui
+            </div>
+        <?php } ?>
+
         <div class="form-card">
             <h3>Tambah Minuman</h3>
 
@@ -406,6 +550,14 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
                 <button type="submit" name="tambah">+ Tambah Minuman</button>
             </form>
         </div>
+
+        <form method="GET" style="margin-bottom:20px;">
+    <input type="text" name="cari" placeholder="Cari nama minuman..."
+           value="<?php echo $cari; ?>"
+           style="width:300px;">
+    <button type="submit">🔍 Cari</button>
+    
+</form>
 
         <div class="table-card">
             <table>
@@ -431,9 +583,17 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
                     <td><span class="badge"><?php echo $row['status']; ?></span></td>
                     <td>
                         <a href="edit_minuman.php?id=<?php echo $row['id_minuman']; ?>" class="edit">Edit</a>
-                        <a href="data_minuman.php?hapus=<?php echo $row['id_minuman']; ?>" 
-                           onclick="return confirm('Yakin hapus data?')" 
-                           class="hapus">Hapus</a>
+
+                        <a href="#"
+                           onclick="openConfirmModal(
+                               'data_minuman.php?hapus=<?php echo $row['id_minuman']; ?>',
+                               'Hapus Minuman',
+                               'Yakin ingin menghapus data minuman ini?',
+                               'Hapus'
+                           )"
+                           class="hapus">
+                           Hapus
+                        </a>
                     </td>
                 </tr>
 
@@ -447,6 +607,32 @@ $data = mysqli_query($conn, "SELECT * FROM minuman");
 
     </div>
 </div>
+
+<div id="confirmModal" class="modal">
+    <div class="modal-box">
+        <h3 id="modalTitle">Konfirmasi</h3>
+        <p id="modalMessage">Yakin ingin melanjutkan?</p>
+
+        <div class="modal-actions">
+            <button type="button" onclick="closeConfirmModal()" class="btn-cancel">Batal</button>
+            <a href="#" id="modalConfirmBtn" class="btn-confirm">Lanjut</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openConfirmModal(url, title, message, buttonText) {
+    document.getElementById("modalTitle").innerText = title;
+    document.getElementById("modalMessage").innerText = message;
+    document.getElementById("modalConfirmBtn").innerText = buttonText;
+    document.getElementById("modalConfirmBtn").href = url;
+    document.getElementById("confirmModal").style.display = "flex";
+}
+
+function closeConfirmModal() {
+    document.getElementById("confirmModal").style.display = "none";
+}
+</script>
 
 </body>
 </html>

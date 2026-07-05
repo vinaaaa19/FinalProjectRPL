@@ -27,6 +27,62 @@ $total_bahan = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM bahan"));
     <title>Profil Pemilik - Drink Point</title>
 
     <style>
+
+        .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.modal-box {
+    background: white;
+    width: 360px;
+    padding: 28px;
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+
+.modal-box h3 {
+    margin-top: 0;
+    color: #d6001c;
+}
+
+.modal-box p {
+    color: #555;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.btn-cancel,
+.btn-logout {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-cancel {
+    background: #f3f4f6;
+    color: #333;
+}
+
+.btn-logout {
+    background: #d6001c;
+    color: white;
+}
+
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -68,6 +124,13 @@ $total_bahan = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM bahan"));
             font-weight: bold;
             overflow: hidden;
             flex-shrink: 0;
+        }
+
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
         }
 
         .avatar img {
@@ -161,6 +224,14 @@ $total_bahan = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM bahan"));
 
     <div class="card">
 
+    <div class="card">
+
+    <?php if(isset($_GET['success'])){ ?>
+    <div class="success-box">
+        ✅ Profil berhasil diperbarui
+    </div>
+    <?php } ?>
+
         <div class="header">
             <div class="avatar">
                 <?php if (!empty($user['foto'])) { ?>
@@ -228,6 +299,50 @@ $total_bahan = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM bahan"));
     </div>
 
 </div>
+
+<div id="logoutModal" class="modal">
+    <div class="modal-box">
+        <h3>Konfirmasi Logout</h3>
+        <p>Yakin ingin keluar dari sistem?</p>
+
+        <div class="modal-actions">
+            <button onclick="closeLogoutModal()" class="btn-cancel">Batal</button>
+            <a href="logout.php" class="btn-logout">Logout</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openLogoutModal() {
+    document.getElementById("logoutModal").style.display = "flex";
+}
+
+function closeLogoutModal() {
+    document.getElementById("logoutModal").style.display = "none";
+}
+</script>
+
+<div id="logoutModal" class="modal">
+    <div class="modal-box">
+        <h3>Konfirmasi Logout</h3>
+        <p>Yakin ingin keluar dari sistem?</p>
+
+        <div class="modal-actions">
+            <button onclick="closeLogoutModal()" class="btn-cancel">Batal</button>
+            <a href="logout.php" class="btn-logout">Logout</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openLogoutModal() {
+    document.getElementById("logoutModal").style.display = "flex";
+}
+
+function closeLogoutModal() {
+    document.getElementById("logoutModal").style.display = "none";
+}
+</script>
 
 </body>
 </html>

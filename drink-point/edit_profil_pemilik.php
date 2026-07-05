@@ -18,23 +18,29 @@ $user = mysqli_fetch_assoc(
     mysqli_query($conn, "SELECT * FROM users WHERE id='$id'")
 );
 
+$error = "";
+
 if (isset($_POST['simpan'])) {
 
     $nama = $_POST['nama'];
     $username = $_POST['username'];
-
     $foto = $user['foto'];
 
-    if ($_FILES['foto']['name'] != "") {
+    if (!empty($_FILES['foto']['name'])) {
 
-        $nama_file = time() . "_" . $_FILES['foto']['name'];
+        if (!is_dir("uploads")) {
+            mkdir("uploads", 0777, true);
+        }
 
-        move_uploaded_file(
-            $_FILES['foto']['tmp_name'],
-            "uploads/" . $nama_file
-        );
+        $nama_file = time() . "_" . basename($_FILES['foto']['name']);
+        $tujuan = "uploads/" . $nama_file;
 
-        $foto = $nama_file;
+        if (move_uploaded_file($_FILES['foto']['tmp_name'], $tujuan)) {
+            $foto = $nama_file;
+        } else {
+            header("Location: edit_profil_pemilik.php?error=upload");
+            exit;
+        }
     }
 
     mysqli_query($conn, "
@@ -47,12 +53,7 @@ if (isset($_POST['simpan'])) {
 
     $_SESSION['nama'] = $nama;
 
-    echo "
-    <script>
-        alert('Profil berhasil diperbarui');
-        window.location='profil_pemilik.php';
-    </script>
-    ";
+    header("Location: profil_pemilik.php?success=profil");
     exit;
 }
 
@@ -60,30 +61,21 @@ if (isset($_POST['ubah_password'])) {
 
     $password_baru = $_POST['password_baru'];
     $konfirmasi = $_POST['konfirmasi'];
+    $password_hash = password_hash($password_baru, PASSWORD_DEFAULT);
 
     if ($password_baru != $konfirmasi) {
-
-        echo "
-        <script>
-            alert('Konfirmasi password tidak sama');
-        </script>
-        ";
-    } else {
-
-        mysqli_query($conn, "
-            UPDATE users
-            SET password='$password_baru'
-            WHERE id='$id'
-        ");
-
-        echo "
-        <script>
-            alert('Password berhasil diubah');
-            window.location='profil_pemilik.php';
-        </script>
-        ";
+        header("Location: edit_profil_pemilik.php?error=password");
         exit;
     }
+
+    mysqli_query($conn, "
+        UPDATE users
+        SET password='$password_hash'
+        WHERE id='$id'
+    ");
+
+    header("Location: profil_pemilik.php?success=password");
+    exit;
 }
 ?>
 
@@ -93,11 +85,29 @@ if (isset($_POST['ubah_password'])) {
 <title>Edit Profil Pemilik</title>
 
 <style>
-
 body{
     margin:0;
     font-family:Arial;
     background:#fff7f7;
+}
+
+.password-wrapper{
+    position:relative;
+}
+
+.password-wrapper input{
+    padding-right:50px;
+}
+
+.toggle-password{
+    position:absolute;
+    right:15px;
+    top:50%;
+    transform:translateY(-50%);
+    cursor:pointer;
+    color:#777;
+    font-size:18px;
+    user-select:none;
 }
 
 .card{
@@ -172,85 +182,176 @@ input{
     font-weight:bold;
 }
 
+.error-box{
+    background:#fee2e2;
+    color:#991b1b;
+    padding:14px;
+    border-radius:12px;
+    margin-bottom:20px;
+    font-weight:bold;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.modal-box {
+    background: white;
+    width: 360px;
+    padding: 28px;
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+
+.modal-box h3 {
+    margin-top: 0;
+    color: #d6001c;
+}
+
+.modal-box p {
+    color: #555;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.btn-cancel,
+.btn-confirm {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-cancel {
+    background: #f3f4f6;
+    color: #333;
+}
+
+.btn-confirm {
+    background: #d6001c;
+    color: white;
+}
 </style>
 </head>
+
 <body>
 
 <div class="card">
 
-<div class="avatar">
+    <?php if(isset($_GET['error']) && $_GET['error'] == 'upload'){ ?>
+        <div class="error-box">
+            ⚠ Upload foto gagal. Pastikan folder uploads sudah ada.
+        </div>
+    <?php } ?>
 
-<?php if(!empty($user['foto'])){ ?>
+    <?php if(isset($_GET['error']) && $_GET['error'] == 'password'){ ?>
+        <div class="error-box">
+            ⚠ Konfirmasi password tidak sama.
+        </div>
+    <?php } ?>
 
-<img src="uploads/<?php echo $user['foto']; ?>">
+    <div class="avatar">
+        <?php if(!empty($user['foto'])){ ?>
+            <img src="./uploads/<?php echo $user['foto']; ?>">
+        <?php } else { ?>
+            P
+        <?php } ?>
+    </div>
 
-<?php } else { ?>
+    <h1>Edit Profil</h1>
 
-P
+    <form method="POST" enctype="multipart/form-data">
+        <label>Foto Profil</label>
+        <input type="file" name="foto">
 
-<?php } ?>
+        <label>Nama</label>
+        <input type="text" name="nama" value="<?php echo $user['nama']; ?>" required>
 
-</div>
+        <label>Username</label>
+        <input type="text" name="username" value="<?php echo $user['username']; ?>" required>
 
-<h1>Edit Profil</h1>
+        <button type="submit" name="simpan" class="btn">
+            Simpan Profil
+        </button>
+    </form>
 
-<form method="POST" enctype="multipart/form-data">
+    <div class="line"></div>
 
-<label>Foto Profil</label>
-<input type="file" name="foto">
+    <h1>Ubah Password</h1>
 
-<label>Nama</label>
-<input type="text"
-name="nama"
-value="<?php echo $user['nama']; ?>"
-required>
+    <form method="POST" id="passwordForm">
+        <label>Password Baru</label>
+            <div class="password-wrapper">
+                <input type="password" id="password_baru" name="password_baru" required>
+                <span class="toggle-password" onclick="togglePassword('password_baru')">👁️</span>
+            </div>
 
-<label>Username</label>
-<input type="text"
-name="username"
-value="<?php echo $user['username']; ?>"
-required>
+            <label>Konfirmasi Password</label>
+            <div class="password-wrapper">
+                <input type="password" id="konfirmasi" name="konfirmasi" required>
+                <span class="toggle-password" onclick="togglePassword('konfirmasi')">👁️</span>
+            </div>
 
-<button type="submit"
-name="simpan"
-class="btn">
-Simpan Profil
-</button>
+        <button type="button" onclick="openConfirmModal()" class="btn">
+            Simpan Password
+        </button>
+    </form>
 
-</form>
+    <br>
 
-<div class="line"></div>
-
-<h1>Ubah Password</h1>
-
-<form method="POST">
-
-<label>Password Baru</label>
-<input type="password"
-name="password_baru"
-required>
-
-<label>Konfirmasi Password</label>
-<input type="password"
-name="konfirmasi"
-required>
-
-<button type="submit"
-name="ubah_password"
-class="btn">
-Simpan Password
-</button>
-
-</form>
-
-<br>
-
-<a href="profil_pemilik.php"
-class="back">
-← Kembali ke Profil
-</a>
+    <a href="profil_pemilik.php" class="back">
+        ← Kembali ke Profil
+    </a>
 
 </div>
+
+<div id="confirmModal" class="modal">
+    <div class="modal-box">
+        <h3>Konfirmasi Password</h3>
+        <p>Yakin ingin mengubah password akun pemilik?</p>
+
+        <div class="modal-actions">
+            <button type="button" onclick="closeConfirmModal()" class="btn-cancel">Batal</button>
+            <button type="submit" form="passwordForm" name="ubah_password" class="btn-confirm">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openConfirmModal() {
+    document.getElementById("confirmModal").style.display = "flex";
+}
+
+function closeConfirmModal() {
+    document.getElementById("confirmModal").style.display = "none";
+}
+</script>
+
+<script>
+function togglePassword(id) {
+    const input = document.getElementById(id);
+
+    if(input.type === "password"){
+        input.type = "text";
+    }else{
+        input.type = "password";
+    }
+}
+</script>
 
 </body>
 </html>

@@ -22,8 +22,21 @@ $data = mysqli_query($conn, "SELECT * FROM minuman WHERE id_minuman='$id'");
 $row = mysqli_fetch_assoc($data);
 
 if (!$row) {
-    echo "<script>alert('Data minuman tidak ditemukan'); window.location='data_minuman.php';</script>";
-    exit;
+?>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+Swal.fire({
+    icon: 'error',
+    title: 'Data tidak ditemukan',
+    text: 'Data minuman yang dipilih tidak tersedia.',
+    confirmButtonColor: '#dc2626'
+}).then(() => {
+    window.location.href = 'data_minuman.php';
+});
+</script>
+<?php
+exit;
 }
 
 if (isset($_POST['simpan'])) {
@@ -46,8 +59,8 @@ if (isset($_POST['simpan'])) {
         WHERE id_minuman='$id'
     ");
 
-    echo "<script>alert('Data minuman berhasil diperbarui'); window.location='data_minuman.php';</script>";
-    exit;
+   header("Location: data_minuman.php?success=edit");
+exit;
 }
 ?>
 
@@ -56,6 +69,62 @@ if (isset($_POST['simpan'])) {
 <head>
     <title>Edit Minuman - Drink Point</title>
     <style>
+
+        .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+}
+
+.modal-box {
+    background: white;
+    width: 360px;
+    padding: 28px;
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+
+.modal-box h3 {
+    margin-top: 0;
+    color: #d6001c;
+}
+
+.modal-box p {
+    color: #555;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.btn-cancel,
+.btn-logout {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-cancel {
+    background: #f3f4f6;
+    color: #333;
+}
+
+.btn-logout {
+    background: #d6001c;
+    color: white;
+}
+
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -148,6 +217,28 @@ if (isset($_POST['simpan'])) {
 
     <a href="data_minuman.php">← Kembali ke Data Minuman</a>
 </div>
+
+<div id="logoutModal" class="modal">
+    <div class="modal-box">
+        <h3>Konfirmasi Logout</h3>
+        <p>Yakin ingin keluar dari sistem?</p>
+
+        <div class="modal-actions">
+            <button onclick="closeLogoutModal()" class="btn-cancel">Batal</button>
+            <a href="logout.php" class="btn-logout">Logout</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openLogoutModal() {
+    document.getElementById("logoutModal").style.display = "flex";
+}
+
+function closeLogoutModal() {
+    document.getElementById("logoutModal").style.display = "none";
+}
+</script>
 
 </body>
 </html>

@@ -15,17 +15,34 @@ if ($_SESSION['role'] != 'pemilik') {
 $notif_stok = mysqli_query($conn, "SELECT * FROM bahan WHERE status='Menipis'");
 $jumlah_notif = mysqli_num_rows($notif_stok);
 
-$user = mysqli_fetch_assoc(
-    mysqli_query($conn, "
-        SELECT * FROM users
-        WHERE id='".$_SESSION['id']."'
-    ")
-);
+$notif_minuman_habis = mysqli_query($conn, "
+    SELECT * FROM minuman 
+    WHERE stok <= 0
+");
+
+$jumlah_minuman_habis = mysqli_num_rows($notif_minuman_habis);
+
+$jumlah_notif = $jumlah_notif + $jumlah_minuman_habis;
+
+$notif_bukti = mysqli_query($conn, "
+    SELECT * FROM transaksi 
+    WHERE metode_pembayaran != 'Tunai'
+    AND (bukti_pembayaran IS NULL OR bukti_pembayaran = '')
+");
+
+$jumlah_bukti = mysqli_num_rows($notif_bukti);
+
+$jumlah_notif = $jumlah_notif + $jumlah_bukti;
+
+$user = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT * FROM users
+    WHERE id='".$_SESSION['id']."'
+"));
 
 if (isset($_POST['tambah'])) {
     $nama = $_POST['nama'];
     $username = $_POST['username'];
-    $password = $_POST['password'];
+    $password_hash = password_hash($password, PASSWORD_DEFAULT);
     $role = "karyawan";
     $status = "Aktif";
     $tanggal_daftar = date('Y-m-d');
@@ -33,38 +50,38 @@ if (isset($_POST['tambah'])) {
     $cek = mysqli_query($conn, "SELECT * FROM users WHERE username='$username'");
 
     if (mysqli_num_rows($cek) > 0) {
-        echo "<script>alert('Username sudah digunakan!'); window.location='akun_karyawan.php';</script>";
+        header("Location: akun_karyawan.php?error=username");
         exit;
     }
 
     mysqli_query($conn, "INSERT INTO users 
         (nama, username, password, role, status, tanggal_daftar)
         VALUES
-        ('$nama', '$username', '$password', '$role', '$status', '$tanggal_daftar')
+        ('$nama', '$username', '$password_hash', '$role', '$status', '$tanggal_daftar')
     ");
 
-    header("Location: akun_karyawan.php");
+    header("Location: akun_karyawan.php?success=tambah");
     exit;
 }
 
 if (isset($_GET['nonaktif'])) {
     $id = $_GET['nonaktif'];
     mysqli_query($conn, "UPDATE users SET status='Nonaktif' WHERE id='$id' AND role='karyawan'");
-    header("Location: akun_karyawan.php");
+    header("Location: akun_karyawan.php?success=nonaktif");
     exit;
 }
 
 if (isset($_GET['aktif'])) {
     $id = $_GET['aktif'];
     mysqli_query($conn, "UPDATE users SET status='Aktif' WHERE id='$id' AND role='karyawan'");
-    header("Location: akun_karyawan.php");
+    header("Location: akun_karyawan.php?success=aktif");
     exit;
 }
 
 if (isset($_GET['hapus'])) {
     $id = $_GET['hapus'];
     mysqli_query($conn, "DELETE FROM users WHERE id='$id' AND role='karyawan'");
-    header("Location: akun_karyawan.php");
+    header("Location: akun_karyawan.php?success=hapus");
     exit;
 }
 
@@ -100,9 +117,7 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
     <title>Akun Karyawan - Drink Point</title>
 
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * 
 
         body {
             margin: 0;
@@ -116,12 +131,27 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
             min-height: 100vh;
         }
 
-        .sidebar {
-            width: 270px;
-            background: linear-gradient(180deg, #e6001f, #b40018);
-            color: white;
-            padding: 30px 25px;
-            position: relative;
+        .sidebar{
+           width:300px;
+    background:linear-gradient(180deg,#e6001f,#b40018);
+    color:white;
+    padding:30px 25px;
+
+    position:fixed;
+    left:0;
+    top:0;
+
+    height:100vh;
+    overflow:hidden;
+        }
+
+        .content{
+            margin-left:330px;
+    width:calc(100% - 300px);
+    padding:45px;
+    background:white;
+    height:100vh;
+    overflow-y:auto;
         }
 
         .logo {
@@ -151,17 +181,22 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
             background: rgba(255,255,255,0.25);
         }
 
+        .menu {
+            padding-bottom: 160px;
+        }
+
         .logout-box {
-            position: absolute;
+            position: fixed;
             left: 25px;
             bottom: 25px;
-            width: 220px;
+            width: 240px;
             background: rgba(255,255,255,0.08);
             border: 1px solid rgba(255,255,255,0.35);
             border-radius: 15px;
             padding: 18px;
             color: white;
             text-decoration: none;
+            z-index: 1000;
         }
 
         .logout-box div {
@@ -176,13 +211,6 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
 
         .logout-box:hover {
             background: rgba(255,255,255,0.18);
-        }
-
-        .content {
-            flex: 1;
-            padding: 45px;
-            background: white;
-            overflow-x: auto;
         }
 
         .top {
@@ -228,6 +256,13 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
             font-weight: bold;
             font-size: 18px;
             overflow: hidden;
+        }
+
+        .avatar-mini img{
+            width:100%;
+            height:100%;
+            object-fit:cover;
+            border-radius:50%;
         }
 
         .notif {
@@ -281,7 +316,7 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
             display: block;
         }
 
-                h1 {
+        h1 {
             font-size: 36px;
             margin: 0;
         }
@@ -457,11 +492,30 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
             margin-right: 5px;
             background: white;
             border: 1px solid #ddd;
+            color: #333;
         }
 
         .hapus {
             border: 1px solid #ff9b9b;
             color: #d6001c;
+        }
+
+        .success-box {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .error-box {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: bold;
         }
 
         .legend-wrap {
@@ -492,6 +546,61 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
 
         .dot-red {
             background: #ef4444;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+
+        .modal-box {
+            background: white;
+            width: 360px;
+            padding: 28px;
+            border-radius: 18px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+        }
+
+        .modal-box h3 {
+            margin-top: 0;
+            color: #d6001c;
+        }
+
+        .modal-box p {
+            color: #555;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .btn-cancel,
+        .btn-confirm {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-cancel {
+            background: #f3f4f6;
+            color: #333;
+        }
+
+        .btn-confirm {
+            background: #d6001c;
+            color: white;
         }
 
         .footer {
@@ -544,11 +653,10 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
             <a href="laporan.php">📊 Laporan Penjualan</a>
             <a href="validasi.php">✅ Validasi Laporan</a>
             <a href="akun_karyawan.php" class="active">👥 Akun Karyawan</a>
+            <a href="profil_pemilik.php">👤 Profil Saya</a>
         </div>
 
-        <a href="logout.php" 
-            onclick="return confirm('Yakin ingin logout?')" 
-            class="logout-box">
+        <a href="#" onclick="openConfirmModal('logout.php','Konfirmasi Logout','Yakin ingin keluar dari sistem?','Logout')" class="logout-box">
             <div>🚪 Logout</div>
             <small>Keluar dari sistem</small>
         </a>
@@ -569,19 +677,51 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
                         <b>Notifikasi</b>
 
                         <?php if ($jumlah_notif > 0) { ?>
-                            <?php while ($n = mysqli_fetch_assoc($notif_stok)) { ?>
-                                <p>⚠ Stok <?php echo $n['nama_bahan']; ?> menipis</p>
-                            <?php } ?>
-                        <?php } else { ?>
-                            <p>Tidak ada notifikasi</p>
-                        <?php } ?>
+
+    <?php while ($n = mysqli_fetch_assoc($notif_stok)) { ?>
+       <p>
+    <a href="<?php echo ($_SESSION['role']=='pemilik') ? 'stok_bahan.php' : 'stok_bahan_karyawan.php'; ?>"
+       style="color:#333;text-decoration:none;">
+        ⚠ Stok <?php echo $n['nama_bahan']; ?> menipis
+        <br>
+        <small>Klik untuk cek stok bahan</small>
+    </a>
+</p>
+    <?php } ?>
+    
+    <?php while ($m = mysqli_fetch_assoc($notif_minuman_habis)) { ?>
+    <p>
+        <a href="data_minuman.php" style="color:#333;text-decoration:none;">
+            🥤 Minuman <?php echo $m['nama_minuman']; ?> habis
+            <br>
+            <small>Klik untuk cek data minuman</small>
+        </a>
+    </p>
+<?php } ?>
+
+    <?php while ($b = mysqli_fetch_assoc($notif_bukti)) { ?>
+    <p>
+    <a href="laporan.php" style="color:#333;text-decoration:none;">
+        📷 Bukti pembayaran transaksi 
+        #<?php echo $b['id_transaksi']; ?> belum diupload
+        <br>
+        <small>Klik untuk upload bukti pembayaran</small>
+    </a>
+</p>
+<?php } ?>
+
+<?php } else { ?>
+
+    <p>Tidak ada notifikasi</p>
+
+<?php } ?>
                     </div>
                 </div>
 
                 <a href="profil_pemilik.php" class="avatar-link">
                     <div class="avatar-mini">
                         <?php if (!empty($user['foto'])) { ?>
-                            <img src="uploads/<?php echo $user['foto']; ?>" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                            <img src="./uploads/<?php echo $user['foto']; ?>" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
                         <?php } else { ?>
                             <?php echo strtoupper(substr($_SESSION['nama'], 0, 1)); ?>
                         <?php } ?>
@@ -595,6 +735,18 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
 
             </div>
         </div>
+
+        <?php if (isset($_GET['success'])) { ?>
+            <div class="success-box">
+                ✅ Data akun karyawan berhasil diperbarui
+            </div>
+        <?php } ?>
+
+        <?php if (isset($_GET['error']) && $_GET['error'] == 'username') { ?>
+            <div class="error-box">
+                ⚠ Username sudah digunakan
+            </div>
+        <?php } ?>
 
         <div class="page-head">
             <h1>Akun Karyawan</h1>
@@ -641,7 +793,7 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
         <div class="tools">
             <form method="GET" class="search-box">
                 <input type="text" name="search" placeholder="Cari nama karyawan..." value="<?php echo $search; ?>">
-                <button type="submit" class="btn">Cari</button>
+                <button type="submit" class="btn">🔍 Cari</button>
             </form>
 
             <form method="GET" class="filter-box">
@@ -679,7 +831,6 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
                     </td>
 
                     <td><?php echo $row['username']; ?></td>
-
                     <td>Kasir</td>
 
                     <td>
@@ -694,24 +845,45 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
 
                     <td>
                         <?php if ($row['status'] == 'Aktif') { ?>
-                            <a href="akun_karyawan.php?nonaktif=<?php echo $row['id']; ?>" 
-                               onclick="return confirm('Nonaktifkan akun ini?')" 
-                               class="aksi" 
+                            <a href="#"
+                               onclick="openConfirmModal(
+                                   'akun_karyawan.php?nonaktif=<?php echo $row['id']; ?>',
+                                   'Nonaktifkan Akun',
+                                   'Yakin ingin menonaktifkan akun karyawan ini?',
+                                   'Nonaktifkan'
+                               )"
+                               class="aksi"
                                title="Nonaktifkan">✎</a>
                         <?php } else { ?>
-                            <a href="akun_karyawan.php?aktif=<?php echo $row['id']; ?>" 
-                               onclick="return confirm('Aktifkan akun ini?')" 
-                               class="aksi" 
+                            <a href="#"
+                               onclick="openConfirmModal(
+                                   'akun_karyawan.php?aktif=<?php echo $row['id']; ?>',
+                                   'Aktifkan Akun',
+                                   'Yakin ingin mengaktifkan akun karyawan ini?',
+                                   'Aktifkan'
+                               )"
+                               class="aksi"
                                title="Aktifkan">✓</a>
                         <?php } ?>
 
-                        <a href="edit_password_karyawan.php?id=<?php echo $row['id']; ?>" 
-                           class="aksi" 
+                        <a href="edit_profil_karyawan.php?id=<?php echo $row['id']; ?>"
+                            class="aksi"
+                            title="Edit Profil">
+                            ✏️
+                            </a>
+
+                        <a href="edit_password_karyawan.php?id=<?php echo $row['id']; ?>"
+                           class="aksi"
                            title="Edit Password">🔑</a>
 
-                        <a href="akun_karyawan.php?hapus=<?php echo $row['id']; ?>" 
-                           onclick="return confirm('Yakin hapus akun karyawan ini?')" 
-                           class="aksi hapus" 
+                        <a href="#"
+                           onclick="openConfirmModal(
+                               'akun_karyawan.php?hapus=<?php echo $row['id']; ?>',
+                               'Hapus Akun',
+                               'Yakin ingin menghapus akun karyawan ini?',
+                               'Hapus'
+                           )"
+                           class="aksi hapus"
                            title="Hapus">🗑</a>
                     </td>
                 </tr>
@@ -743,6 +915,32 @@ $total_bulan_ini = mysqli_num_rows(mysqli_query($conn, "
     </div>
 
 </div>
+
+<div id="confirmModal" class="modal">
+    <div class="modal-box">
+        <h3 id="modalTitle">Konfirmasi</h3>
+        <p id="modalMessage">Yakin ingin melanjutkan?</p>
+
+        <div class="modal-actions">
+            <button type="button" onclick="closeConfirmModal()" class="btn-cancel">Batal</button>
+            <a href="#" id="modalConfirmBtn" class="btn-confirm">Lanjut</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openConfirmModal(url, title, message, buttonText) {
+    document.getElementById("modalTitle").innerText = title;
+    document.getElementById("modalMessage").innerText = message;
+    document.getElementById("modalConfirmBtn").innerText = buttonText;
+    document.getElementById("modalConfirmBtn").href = url;
+    document.getElementById("confirmModal").style.display = "flex";
+}
+
+function closeConfirmModal() {
+    document.getElementById("confirmModal").style.display = "none";
+}
+</script>
 
 </body>
 </html>
